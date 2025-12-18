@@ -1,0 +1,15 @@
+{
+  "name": "小二數學直式練習",
+  "short_name": "數學練習",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#fdfdfd",
+  "theme_color": "#4a90e2",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3232/3232145.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
