@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>小二數學直式練習</title>
+    <style>
+        /* --- 基礎設定 & 防止捲動 --- */
+        :root {
+            --bg-color: #fdfdfd;
+            --grid-color: #aaddff;
+            --text-color: #333;
+            --primary-color: #4a90e2;
+            --accent-color: #ff5e5e; /* 紅色提示 */
+            --btn-shadow: #888;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none; /* 禁止選取文字 */
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* 禁止捲動 */
+            overscroll-behavior: none; /* 禁止 iOS 橡皮筋效果 */
+            font-family: 'Comic Sans MS', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 方格紙背景 --- */
+        .paper-bg {
+            background-image: 
+                linear-gradient(var(--grid-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+            background-size: 40px 40px; /* 大方格適合對齊 */
+            background-position: center top;
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- 題目區域 (直式排列) --- */
+        .math-container {
+            position: relative;
+            font-size: 4rem;
+            font-weight: bold;
+            color: var(--text-color);
+            line-height: 1.2;
+            text-align: right;
+            z-index: 10; /* 在畫布下方，但在背景上方... 等等，畫布要在最上層 */
+            pointer-events: none; /* 讓點擊穿透到 canvas */
+            padding: 20px;
+            background: rgba(255,255,255,0.6); /* 輕微白底增加對比 */
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            letter-spacing: 0.5rem;
+            position: relative;
+        }
+
+        .operator {
+            position: absolute;
+            left: -50px;
+            font-size: 3rem;
+        }
+
+        .divider {
+            height: 4px;
+            background-color: var(--text-color);
+            margin: 10px 0;
+            border-radius: 2px;
+        }
+
+        /* 答案輸入框 (模擬) */
+        .answer-box {
+            height: 80px;
+            border: 2px dashed #999;
+            background: #fff;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            border-radius: 8px;
+            min-width: 160px;
+        }
+
+        .answer-box.correct {
+            border: 3px solid #4CAF50;
+            color: #4CAF50;
+            background: #e8f5e9;
+        }
+
+        .answer-box.wrong {
+            border: 3px solid var(--accent-color);
+            animation: shake 0.4s ease-in-out;
+        }
+
+        /* --- 智慧提示 (進位/退位) --- */
+        .hint-bubble {
+            position: absolute;
+            top: -40px; /* 在十位數上方 */
+            right: 85px; /* 調整至十位數位置 */
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--accent-color);
+            color: var(--accent-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: white;
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .hint-bubble.show {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* --- 手寫畫布 --- */
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 20; /* 最上層，接收觸控 */
+            touch-action: none; /* 關鍵：完全接管觸控，防止捲動 */
+            cursor: crosshair;
+        }
+
+        /* --- 擬真鍵盤 --- */
+        .keypad {
+            background-color: #e0e0e0;
+            padding: 20px;
+            padding-bottom: 30px; /* 適應 iPhone Home bar */
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+            z-index: 30;
+        }
+
+        .btn {
+            background: #f0f0f0;
+            border: none;
+            border-radius: 12px;
+            height: 70px;
+            font-size: 2rem;
+            font-weight: bold;
+            color: #444;
+            box-shadow: 0 4px 0 #bbb;
+            active: translateY(4px);
+            transition: all 0.1s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn:active {
+            box-shadow: 0 0 0 #bbb;
+            transform: translateY(4px);
+        }
+
+        .btn-del {
+            background-color: #ffcccc;
+            color: #d32f2f;
+            box-shadow: 0 4px 0 #e57373;
+        }
+        .btn-del:active { box-shadow: 0 0 0 #e57373; }
+
+        .btn-ok {
+            background-color: #4CAF50;
+            color: white;
+            box-shadow: 0 4px 0 #2E7D32;
+        }
+        .btn-ok:active { box-shadow: 0 0 0 #2E7D32; }
+
+        /* --- 動畫 --- */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+
+        /* 狀態訊息 */
+        .message {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.9);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 1.2rem;
+            color: #666;
+            pointer-events: none;
+            z-index: 25;
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="message" id="msgBox">請計算答案</div>
+
+    <div class="paper-bg" id="drawArea">
+        <div class="math-container">
+            <div id="hint" class="hint-bubble">1</div>
+
+            <div class="row">
+                <span id="num1">00</span>
+            </div>
+            <div class="row">
+                <span class="operator" id="op">+</span>
+                <span id="num2">00</span>
+            </div>
+            <div class="divider"></div>
+            <div class="row">
+                <div class="answer-box" id="display">?</div>
+            </div>
+        </div>
+        <canvas id="scribbleCanvas"></canvas>
+    </div>
+
+    <div class="keypad">
+        <button class="btn" onclick="inputNum(1)">1</button>
+        <button class="btn" onclick="inputNum(2)">2</button>
+        <button class="btn" onclick="inputNum(3)">3</button>
+        <button class="btn" onclick="inputNum(4)">4</button>
+        <button class="btn" onclick="inputNum(5)">5</button>
+        <button class="btn" onclick="inputNum(6)">6</button>
+        <button class="btn" onclick="inputNum(7)">7</button>
+        <button class="btn" onclick="inputNum(8)">8</button>
+        <button class="btn" onclick="inputNum(9)">9</button>
+        <button class="btn btn-del" onclick="delNum()">⌫</button>
+        <button class="btn" onclick="inputNum(0)">0</button>
+        <button class="btn btn-ok" onclick="submitAnswer()">OK</button>
+    </div>
+
+<script>
+    // --- 變數設定 ---
+    let currentInput = "";
+    let n1, n2, isAdd;
+    let correctAnswer;
+    let isProcessing = false; // 防止連續點擊
+
+    const displayEl = document.getElementById('display');
+    const num1El = document.getElementById('num1');
+    const num2El = document.getElementById('num2');
+    const opEl = document.getElementById('op');
+    const hintEl = document.getElementById('hint');
+    const msgEl = document.getElementById('msgBox');
+    
+    // --- 初始化題目 ---
+    function generateQuestion() {
+        isProcessing = false;
+        currentInput = "";
+        displayEl.innerText = "?";
+        displayEl.className = "answer-box"; // 重置樣式
+        hintEl.classList.remove('show');
+        msgEl.style.display = 'none';
+
+        // 隨機決定加法或減法
+        isAdd = Math.random() > 0.5;
+
+        // 生成兩位數 (10-99)
+        n1 = Math.floor(Math.random() * 90) + 10;
+        n2 = Math.floor(Math.random() * 90) + 10;
+
+        if (isAdd) {
+            // 加法：隨機，但最好不要超過150以免太難 (這裡不做限制，依需求)
+            opEl.innerText = "+";
+            correctAnswer = n1 + n2;
+        } else {
+            // 減法：確保不出現負數，且被減數要是兩位數
+            if (n1 < n2) [n1, n2] = [n2, n1]; // 交換確保 n1 >= n2
+            opEl.innerText = "-";
+            correctAnswer = n1 - n2;
+        }
+
+        num1El.innerText = n1;
+        num2El.innerText = n2;
+
+        // 換題時自動清除畫布
+        clearCanvas();
+    }
+
+    // --- 鍵盤邏輯 ---
+    function inputNum(num) {
+        if (isProcessing) return; // 答對後暫停輸入
+        if (currentInput.length >= 3) return; // 限制長度
+        
+        currentInput += num;
+        displayEl.innerText = currentInput;
+        displayEl.classList.remove('wrong'); // 輸入時移除錯誤狀態
+    }
+
+    function delNum() {
+        if (isProcessing) return;
+        currentInput = currentInput.slice(0, -1);
+        displayEl.innerText = currentInput === "" ? "?" : currentInput;
+    }
+
+    function submitAnswer() {
+        if (isProcessing) return;
+        if (currentInput === "") return;
+
+        const userAns = parseInt(currentInput);
+
+        if (userAns === correctAnswer) {
+            // 答對邏輯
+            handleCorrect();
+        } else {
+            // 答錯邏輯
+            handleWrong();
+        }
+    }
+
+    function handleCorrect() {
+        isProcessing = true;
+        displayEl.classList.add('correct');
+        displayEl.innerText = "👍 " + currentInput;
+        hintEl.classList.remove('show'); // 答對隱藏提示
+        
+        // 播放簡單音效或視覺回饋 (此處以延遲換題為主)
+        setTimeout(() => {
+            generateQuestion();
+        }, 1500);
+    }
+
+    function handleWrong() {
+        displayEl.classList.add('wrong');
+        currentInput = ""; // 清空輸入讓孩子重打
+        displayEl.innerText = "?";
+        
+        // --- 核心：智慧提示邏輯 ---
+        checkAndShowHint();
+    }
+
+    function checkAndShowHint() {
+        const u1 = n1 % 10; // 個位數
+        const u2 = n2 % 10;
+        
+        if (isAdd) {
+            // 加法進位檢測：個位數相加 >= 10
+            if (u1 + u2 >= 10) {
+                hintEl.innerText = "1";
+                hintEl.style.borderColor = "#ff5e5e";
+                hintEl.style.color = "#ff5e5e";
+                hintEl.classList.add('show');
+            }
+        } else {
+            // 減法退位檢測：被減數個位 < 減數個位
+            if (u1 < u2) {
+                hintEl.innerText = "退";
+                hintEl.style.borderColor = "#ff5e5e";
+                hintEl.style.color = "#ff5e5e";
+                hintEl.classList.add('show');
+            }
+        }
+    }
+
+    // --- 畫布功能 (Canvas) ---
+    const canvas = document.getElementById('scribbleCanvas');
+    const ctx = canvas.getContext('2d');
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    // 調整 Canvas 大小
+    function resizeCanvas() {
+        const parent = document.querySelector('.paper-bg');
+        canvas.width = parent.clientWidth;
+        canvas.height = parent.clientHeight;
+        
+        // 設定畫筆樣式
+        ctx.strokeStyle = "#555"; // 鉛筆灰
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.lineWidth = 3;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    
+    // 繪圖事件
+    function getTouchPos(canvas, evt) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (evt.touches[0].clientX - rect.left),
+            y: (evt.touches[0].clientY - rect.top)
+        };
+    }
+
+    function startDraw(e) {
+        isDrawing = true;
+        // 支援滑鼠與觸控
+        const pos = e.type.includes('touch') ? getTouchPos(canvas, e) : {x: e.offsetX, y: e.offsetY};
+        [lastX, lastY] = [pos.x, pos.y];
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        e.preventDefault(); // 防止滑動畫面
+        const pos = e.type.includes('touch') ? getTouchPos(canvas, e) : {x: e.offsetX, y: e.offsetY};
+        
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(pos.x, pos.y);
+        ctx.stroke();
+        [lastX, lastY] = [pos.x, pos.y];
+    }
+
+    function stopDraw() {
+        isDrawing = false;
+    }
+
+    // 綁定事件
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDraw);
+    canvas.addEventListener('mouseout', stopDraw);
+
+    canvas.addEventListener('touchstart', startDraw, {passive: false});
+    canvas.addEventListener('touchmove', draw, {passive: false});
+    canvas.addEventListener('touchend', stopDraw);
+
+    function clearCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // --- 啟動程式 ---
+    window.onload = function() {
+        resizeCanvas();
+        generateQuestion();
+    };
+
+</script>
+</body>
+</html>
